@@ -4,14 +4,14 @@ TO DO:
 DONE 1. scale in proportion to volume, not radius
 DONE 2. order color_legend descending to ascending (or alphabetical order)
 DONE 3. change raptorXproperty names
-4. add RaptorXProperty names if found in config but not saav_table
+DONE 4. add RaptorXProperty variables if found in config but not saav_table
 5. config input validity
 6. active site analysis
 7. sidechain
 8. protein_color
 9. make color_scheme called `surprisinglythisexists`
 DONE 10. add argparse
-11. make anvi-append-raptorx binary
+11. make anvi-append-external-columns-to-SAAV-table binary
 """
 
 import os
@@ -62,7 +62,7 @@ class MoleculeOperations():
         self.res = A("res")
 
     #   get dictionary of all columns appended by external classes (for now its just RaptorX)
-        self.get_dict_of_additional_column_names()
+        self.AddClasses = self.get_dict_of_additional_column_names()
 
     #   initialize a VariantsTable object
         self.table = VariantsTable(args)
@@ -80,21 +80,17 @@ class MoleculeOperations():
         self.get_name_save_dictionary()
 
     #   load pymol_config file as ConfigParse object and validate its logic
-        """ For now, all I do is load the settings. Later I will make sure all
-        of the logic works out. """
-        self.config = Config(self.config_fname)
+        self.config = Config(self.config_fname, self.AddClasses, self.table)
+
+    #   self.config contains a list of append methods
+    #   self.list_of_SAAV_table_append_routines that should be called based on
+    #   the values provided in the config file. All of the Classes that append
+    #   these variables are then called.
+        for Class_ID in self.AddClasses.keys():
+            if Class_ID in self.config.list_of_SAAV_table_append_routines:
+                self.AddClasses[Class_ID][1](self.table, self.args)
 
     #   create columns if they don't exist in saav-table already
-        self.maybe_add_raptorX()
-        """ From now, I will assume any columns mentioned in
-        self.config.config_dict already exist in self.table (except for
-        prevalence columns, which are currently generated below if "prevalence"
-        is the value of merged_sphere_size_var or merged_alpha_var). Later I will
-        have to make a list of columns found in the config file, and tag to
-        each a class and corresponding method responsible for appending them to
-        saav_table. Then I will call each of those classes with a method_list
-        parameter, e.g. AddRaptorXProperty(self.table, methods_list, args).
-        Each Add class should have an attribute called "columns_i_add" """
         add_prevalence = False
     #   read as: if "prevalence" is in your INI file
         for section in self.config.config.sections():
@@ -125,12 +121,12 @@ class MoleculeOperations():
     def get_dict_of_additional_column_names(self):
         """
         Gets a list of all classes that add columns to the SAAV table from external sources.
-        key : value looks like Class_name : ([col1, col2, col3, ...], Class)
+        {key : value} looks like {Class_name : ([col1, col2, col3, ...], Class)}
         """
         AddClasses = dict([x for x in inspect.getmembers(sys.modules[__name__], inspect.isclass) if "Add" in x[0]])
         for Class_ID in AddClasses.keys():
             AddClasses[Class_ID] = (AddClasses[Class_ID].column_names(), AddClasses[Class_ID])
-        print(AddClasses)
+        return AddClasses
 
     def get_name_save_dictionary(self):
         """
@@ -206,7 +202,7 @@ class MoleculeOperations():
     
         for gene in self.table.genes:
 
-            print("Currently on SECTION: {}, GENE: {}".format(self.perspective, gene))
+            print("\nCurrently on SECTION: {}, GENE: {}".format(self.perspective, gene))
             
             self.gene = gene
         
@@ -626,8 +622,8 @@ class MoleculeOperations():
 
     #   if no file provided, accept all sample_ids in SAAV table
         if not self.sample_groups_fname:
-            print("\nWARNING: no sample-groups file provided. No groupings will be made and "
-                  "samples will be assumed to be those present in the SAAV table\n")
+            print("\nWARNING: No sample-groups file provided. No groupings will be made and "
+                  "samples will be assumed to be those present in the SAAV table.")
             self.sample_groups = pd.Series(self.table.saav_table["sample_id"].unique()).to_frame().rename(columns={0:"sample_id"})
 
     #   if file was provided but doesn't exist, inform user
@@ -704,9 +700,9 @@ class MoleculeOperations():
     def validate_table(table):
         class_name = table.__class__.__name__
         if not class_name == "VariantsTable":
-            raise ValueError("You have passed an object of class '{}' to the variable\
-                              table. It must be an object of class VariantsTable".\
-                              format(class_name))
+            raise ValueError(("You have passed an object of class '{}' to the variable "
+                              "table. It must be an object of class VariantsTable".\
+                              format(class_name)))
 
     @staticmethod
     def validate_input_dir(input_dir, table):
@@ -726,8 +722,6 @@ class MoleculeOperations():
     #   if genes in the table aren't found in the raptorx folder, no
         raptor_genes = [int(os.path.splitext(os.path.basename(x))[0]) for x in subdir_list]
         in_both = [gene for gene in table.genes if gene in raptor_genes]
-        print(raptor_genes)
-        print(in_both)
         if not table.genes == in_both:
             missing_in_raptorx = [gene for gene in table.genes if gene not in in_both]
             raise ValueError("You have genes in your table that are missing in your "
@@ -1061,10 +1055,11 @@ class AddRaptorXProperty():
     def __init__(self, table, args, ss3_confidence=0.5, ss8_confidence=0.5, solvent_acc_confidence=0.5):
 
         self.args = args
-        A = lambda x: args[x] if x in args else None
+        #A = lambda x: args[x] if x in args else None
+        A = lambda x: args.__dict__[x] if x in args.__dict__ else None
 
     #   making input variables attributes
-        self.input_dir = A("input-dir")
+        self.input_dir = A("input_dir")
         self.ss3_confidence = ss3_confidence
         self.ss8_confidence = ss8_confidence 
         self.solvent_acc_confidence = solvent_acc_confidence 
@@ -1115,7 +1110,7 @@ class AddRaptorXProperty():
         """
         for method in self.methods_list:
             append_method = getattr(self, method)
-            print("appending method {}".format(method))
+            print("\nAppending method {} from class AddRaptorXProperty".format(method))
             append_method()
 
 
@@ -1488,12 +1483,13 @@ class Config:
     settings. Okay, that wasn't so bad.
     """
     
-    def __init__(self, config_fname):
+    def __init__(self, config_fname, AddClasses, table):
 
-    #   make input parameters options
-        self.config_fname = config_fname
+        self.AddClasses = AddClasses
+        self.table = table
 
     #   load the config file
+        self.config_fname = config_fname
         self.config = self.load_config_file()
 
     #   instantiate default values
@@ -1518,12 +1514,15 @@ class Config:
                                "merged_alpha_static",
                                "sidechain"]
 
+    #   initialize list of append routines that may be called based on values provided in pymol-config
+        self.list_of_SAAV_table_append_routines = []
+
     #   try and raise an error
         self.attack_config_structure()
 
         self.convert_configparser_to_dictionary()
 
-        self.print_config_dict()
+        #self.print_config_dict()
 
 
     def save_pkl(self, directory):
@@ -1567,6 +1566,13 @@ class Config:
                 if (x[0] in self.config.options(perspective) and x[1] not in self.config.options(perspective)):
                     raise ValueError("You can't specify {} without also specifying {}. (You did so in perspective {})".\
                                       format(x[0], x[1], perspective))
+
+        #   you must specify a color_scheme if variable is selected
+            for color_pair in [("color_var", "color_scheme"), ("merged_color_var", "merged_color_scheme")]:
+                if color_pair[0] in self.config.options(perspective) and color_pair[1] not in self.config.options(perspective):
+                    raise ValueError(("Because you supplied a 'color_var' option in perspective '{}', you must also supply a "
+                                     "'color_scheme' option. This error could have been risen due to the lack of a 'merged_color_scheme' "
+                                     "option or a 'color_scheme' option. You do the math.".format(perspective)))
 
 
             """The composition of options in perspective is sound. Now adding defaults where they are needed"""
@@ -1612,18 +1618,30 @@ class Config:
                     self.config.set(perspective, option, self.defaults[option])
 
 
-            """All defaults have been added. Now going through the value for each option to make sure its valid"""
+            """All defaults have been added. Now checking contents of each option"""
+            ############## INCOMPLETE. FOR NOW WE TRUST THE USERS OPTION VALUES ARE VALID ##############
 
 
+        #   consider each option-value pairing in the 
             for option, value in self.config.items(perspective):
-                
+
             #   raise hell if user provided options outside of self.options
                 if option not in self.options_list:
                     raise ValueError("{} in {} isn't a valid option.".format(option, perspective))
 
-                print(option, value)
+            #   if any of (merged_)alpha_var, color_var, and (merged_)color_var contain columns that are considered extra,
+            #   add it to the self.list_of_SAAV_table_append_routines
+                if option in ["color_var", "alpha_var", "sphere_size_var", "merged_alpha_var", "merged_sphere_size_var"]:
+                    for Class_ID in self.AddClasses.keys():
+                        if value in self.AddClasses[Class_ID][0] and value not in list(self.table.saav_table.columns):
+                            self.list_of_SAAV_table_append_routines.append(Class_ID)
+                            print(("\nWARNING: In perspective '{}' you provided for option '{}' the value '{}', which does "
+                                   "not exist in your SAAV table. We will attempt to append this column to your table using "
+                                   "the '{}' append class, which at best will take some time, and at worst will fail miserably. "
+                                   "Fingers crossed. If you want to create a SAAV table that includes this column permanently, "
+                                   "you should run the following command: TBD".\
+                                   format(perspective, option, value, Class_ID)))
 
-            ############## INCOMPLETE. FOR NOW WE TRUST THE USERS OPTION VALUES ARE VALID ##############
 
             """ IMPORTANT """
         #   For now, I don't actually allow merged_color_var,
