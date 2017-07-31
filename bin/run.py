@@ -3,7 +3,7 @@ import argparse
 from moleculeoperations import *
 from argparse import RawTextHelpFormatter
 
-# pymol always wants to get the last word in, this stops it
+# pymol always wants to get the last word when argparse uses system exit, this stops it
 sys.tracebacklimit = 0
 
 parser = argparse.ArgumentParser(description=\
@@ -61,10 +61,10 @@ $ pymol -r saav-gen-pymol-images -- --saav-table your_save_table.txt \\
 #==============================================================================
 
 parser.add_argument("-c", "--pymol-config", type=str, required=True, help=\
-"""This is the most important parameter of this program. This configuration
+"""This is the most important parameter of the program. This configuration
 file (INI format) provides PyMOL all of the information it needs to
 intelligently create those sweet, sweet images you're after. You are able to
-control the COLOR, TRANSPARENCY, and SPHERE_SIZE of each SAAV according to
+control the color, transparency, and sphere_size of each SAAV according to
 variables in the SAAV table. Let's look at an example pymol-config file:
 
     [myperspective1]
@@ -88,13 +88,14 @@ colored according to the `competing_aas` column of the SAAV table (e.g. all
 AspGlu's share the same color). `color_scheme = competing_aas_cmap` indicates
 the color for each unique value of `competing_aas` is defined according to the
 colormap `competing_aas_cmap`, which has been specifically designed for
-`color_var = competing_aas` (e.g. AspGlu is red and IleVal is blue). For a list
-of all available color maps, raise an error by providing a color_scheme that
-definitely doesn't exist, like `thisshouldntexist`. `alpha_var = coverage`
-indicates SAAV tranparency is proportional to the `coverage` column of the SAAV
-table. Since the user does not specify a `sphere_size_var` option, a static
-sphere_size is chosen. If the user doesn't like the default sphere_size, they
-can give their own via `sphere_size_static = x`, where x=2.5, for example.
+`color_var = competing_aas` (e.g. AspGlu might map to red and IleVal might map
+to blue). For a list of all available color maps, raise an error by providing a
+color_scheme that definitely doesn't exist, like `thisshouldntexist`.
+`alpha_var = coverage` indicates SAAV tranparency is proportional to the
+`coverage` column of the SAAV table. Since the user does not specify a
+`sphere_size_var` option, a static sphere_size is chosen by default. If the
+user doesn't like the default sphere_size, they can give their own via
+`sphere_size_static = x`, where x=2.5, for example.
 
 In `myperspective2`, we see new options prepended with `merged_`. Just how
 non-merged options define the images produced for each sample, merged options
@@ -105,17 +106,17 @@ departure_from_reference` indicates SAAV transparency is proportional to
 provided, all non-merged images are given a default static alpha value).
 `merged_sphere_size_var = prevalence` is an exceptional case because
 `prevalence` is not a column in the SAAV table--but instead of raising an
-error, `prevalence` is used as a keyword. So
-what's prevalence?  It's defined as the number of samples in a group that have
-a SAAV at a given codon position divided by the number of samples in the group.
-For example, consider an AA sequence for 3 samples residing in a group, where
-"=" means no SAAV and "o" means SAAV.
+error, `prevalence` is used as a keyword. So what's prevalence?  It's defined
+as the number of samples in a group that have a SAAV at a given codon position
+divided by the number of samples in the group.  For example, consider an AA
+sequence for 3 samples residing in a group, where "=" means no SAAV and "o"
+means SAAV.
 
     sample1 =o======o=
     sample2 =o======o=
     sample3 =====o==o=
              |   |  |
-             2   6  9
+   position  2   6  9
 
 The prevalences for SAAVs at positions 2, 6, and 9 are respectively, 0.67,
 0.33, and 1.00, so in this case SAAV sphere_sizes for merged images are scaled
@@ -166,7 +167,7 @@ envoked.\n\n""")
 #==============================================================================
 
 parser.add_argument("-o", "--output-dir", type=str, required=True, help=\
-"""The directory images and PyMOL files are output to.\n\n""")
+"""The directory image and PyMOL files are output to.\n\n""")
 
 #==============================================================================
 
@@ -175,7 +176,7 @@ parser.add_argument("-g", "--gene-list", type=str, required=False, help=\
 the `corresponding_gene_call` of the SAAV table. Here is an example gene-list
 file:
 
-    corresponding_gene_call
+    gene_id
     1248
     2342
     2452
@@ -208,29 +209,19 @@ patient 3 changed his favorite color from red to green? What a dick).\n\n""")
 
 #==============================================================================
 
-
-parser.add_argument("--ray", type=int, required=False, help=\
+parser.add_argument("--ray", type=int, required=False, default=0, help=\
 """Whether or not ray tracing should be performed. Makes images look good but
 takes longer""")
 
 #==============================================================================
 
-parser.add_argument("--res", type=int, required=False, help=\
+parser.add_argument("--res", type=int, required=False, default=600, help=\
 """Specifies the width (in pixels) of the output images.""")
 
 #============================================================================== 
+
 args = parser.parse_args()
+sys.tracebacklimit = 10
 
-
-
-#args = {"saav-table"                : "SAAV_tables/replicate-3__dfc-gt10_fq_rxp_groups_nonoutliercov",
-#        "gene-list"                 : "toms_genes.txt",
-#        "sample-groups"             : "samples.txt",
-#        "pymol-config"              : "config.txt",
-#        "input-dir"                 : "RaptorXProperty",
-#        "output-dir"                : "SAR11_Stucture",
-#        "ray"                       :  True,
-#        "res"                       :  1200}
-#
-#MoleculeOperations(args)
+MoleculeOperations(args)
 

@@ -10,24 +10,29 @@ DONE 3. change raptorXproperty names
 7. sidechain
 8. protein_color
 9. make color_scheme called `surprisinglythisexists`
+DONE 10. add argparse
+11. make anvi-append-raptorx binary
 """
 
+import os
+import sys
 import math
-import functools
-import shutil
-import pickle as pkl
+import glob
 import time
+import pymol
+import shutil
 import random
-from colour import Color as colour
-import ConfigParser
 import inspect
+import functools
+import ConfigParser
+
 import numpy as np
 import pandas as pd
-import os
-import glob
+import pickle as pkl
 
-import pymol
 from pymol import cmd
+from colour import Color as colour
+
 
 __author__ = "Evan Kiefl"
 __copyright__ = "Copyright 2017, The anvio Project"
@@ -44,21 +49,23 @@ class MoleculeOperations():
         
     #   define inputs as attributes
         self.args = args
+        #A = lambda x: args[x] if x in args else None
         A = lambda x: args.__dict__[x] if x in args.__dict__ else None
-        self.output_dir = A("output-dir")
-        self.input_dir = A("input-dir")
-        self.color_vars = A("color-vars")
-        self.config_fname = A("pymol-config")
-        self.sample_groups_fname = A("sample-groups")
-        self.saav_table_fname = A("saav-table")
-        self.no_images = A("no-images")
+        self.output_dir = A("output_dir")
+        self.input_dir = A("input_dir")
+        self.color_vars = A("color_vars")
+        self.config_fname = A("pymol_config")
+        self.sample_groups_fname = A("sample_groups")
+        self.saav_table_fname = A("saav_table")
+        self.no_images = A("no_images")
         self.ray = A("ray")
         self.res = A("res")
 
+    #   get dictionary of all columns appended by external classes (for now its just RaptorX)
+        self.get_dict_of_additional_column_names()
+
     #   initialize a VariantsTable object
         self.table = VariantsTable(args)
-
-        print(self.table.saav_table["ss3"].value_counts())
 
     #   make sure the input_dir is in good shape
         self.validate_input_dir(self.input_dir, self.table)
@@ -78,6 +85,7 @@ class MoleculeOperations():
         self.config = Config(self.config_fname)
 
     #   create columns if they don't exist in saav-table already
+        self.maybe_add_raptorX()
         """ From now, I will assume any columns mentioned in
         self.config.config_dict already exist in self.table (except for
         prevalence columns, which are currently generated below if "prevalence"
@@ -102,13 +110,27 @@ class MoleculeOperations():
     #   save the config dictionary in self.output_dir as dot file
         self.config.save_pkl(self.output_dir)
     #   save the original sample-groups txt file as a dotfile in self.output_dir
-        shutil.copyfile(self.sample_groups_fname, os.path.join(self.output_dir, ".sample_groups.txt"))
+        self.sample_groups.to_csv(os.path.join(self.output_dir, ".sample_groups.txt"), sep='\t', index=False)
     #   save the original gene-list txt file as a dotfile in self.output_dir
-        shutil.copyfile(self.table.genes_list_fname, os.path.join(self.output_dir, ".gene_list.txt"))
-
+        f = open(os.path.join(self.output_dir, ".gene_list.txt"), "w")
+        f.write("gene_id\n")
+        for gene in self.table.genes:
+            f.write("{}\n".format(gene))
+        f.close()
 
     #   loop_through_perspectives calls loop_through_genes which calls loop_through_groupings
         self.loop_through_perspectives()
+
+
+    def get_dict_of_additional_column_names(self):
+        """
+        Gets a list of all classes that add columns to the SAAV table from external sources.
+        key : value looks like Class_name : ([col1, col2, col3, ...], Class)
+        """
+        AddClasses = dict([x for x in inspect.getmembers(sys.modules[__name__], inspect.isclass) if "Add" in x[0]])
+        for Class_ID in AddClasses.keys():
+            AddClasses[Class_ID] = (AddClasses[Class_ID].column_names(), AddClasses[Class_ID])
+        print(AddClasses)
 
     def get_name_save_dictionary(self):
         """
@@ -488,7 +510,6 @@ class MoleculeOperations():
                 a = alpha - m * (beta-alpha) / (M-m)
                 b = (beta-alpha) / (M-m)
             #   return normalized version of data
-                print( (a + b * saav_data_sphere_size) * scale_factor )
                 return (a + b * saav_data_sphere_size) * scale_factor
 
     #   first things first, add residue column (+1 used to account for the zero-indexing anvio does)
@@ -607,12 +628,14 @@ class MoleculeOperations():
         if not self.sample_groups_fname:
             print("\nWARNING: no sample-groups file provided. No groupings will be made and "
                   "samples will be assumed to be those present in the SAAV table\n")
-            time.sleep(5)
-            self.sample_groups = self.table.saav_table["sample_id"].unique().to_frame()
+            self.sample_groups = pd.Series(self.table.saav_table["sample_id"].unique()).to_frame().rename(columns={0:"sample_id"})
 
-    #   if file doesn't exist, inform user
-        if not os.path.isfile(self.sample_groups_fname):
-            raise ValueError("{} is not a file you moronic piece of scum.".format(self.sample_groups_fname))
+    #   if file was provided but doesn't exist, inform user
+        try:
+            if not os.path.isfile(self.sample_groups_fname):
+                raise ValueError("{} is not a file you moronic piece of scum.".format(self.sample_groups_fname))
+        except:
+            pass
 
     #   otherwise, import sample-groups as a pandas DataFrame
         else:
@@ -703,10 +726,12 @@ class MoleculeOperations():
     #   if genes in the table aren't found in the raptorx folder, no
         raptor_genes = [int(os.path.splitext(os.path.basename(x))[0]) for x in subdir_list]
         in_both = [gene for gene in table.genes if gene in raptor_genes]
+        print(raptor_genes)
+        print(in_both)
         if not table.genes == in_both:
             missing_in_raptorx = [gene for gene in table.genes if gene not in in_both]
-            raise ValueError("You have genes in your table that are missing in your raptorX"
-                             "structure repository. Here are some those that are missing: \n{}".format(missing_in_raptorx))
+            raise ValueError("You have genes in your table that are missing in your "
+                             "structure repository. Here are those that are missing: \n{}".format(missing_in_raptorx))
 
 #======================================================================================
 
@@ -819,9 +844,8 @@ class Color():
         }
 
         color_schemes_string = {
-        "ss3_cmap"           : {"H":"#984ea3", "E":"#ff7f00", "C":"#1b9e77", "U":"#e8e9ea"},
-        "solvent_acc_cmap"   : {"B":"#ff00f2", "M":"#17becf", "E":"#004de8", "U":"#e8e9ea"},
-        "competing_aas_cmap" : (["#bc0000","#fceaea"],[150])
+        "ss3_cmap"           : {"alpha helix":"#984ea3", "beta strand":"#ff7f00", "loop":"#1b9e77", "unknown":"#e8e9ea"},
+        "solvent_acc_cmap"   : {"buried":"#ff00f2", "intermediate":"#17becf", "exposed":"#004de8", "unknown":"#e8e9ea"}
         }
 
     #   this is somewhat of a special case since there are too many colors. I just randomly pick 
@@ -987,7 +1011,6 @@ class Color():
                 round_to_what = -int(math.floor(math.log10(data_range/10)))
                 markers = np.linspace(self.template_data[0], self.template_data[1], 10)
                 markers = np.around(markers, round_to_what)
-                print(markers)
 
                 for i in range(len(markers)):
                 #   get the RGBs as list
@@ -1031,19 +1054,20 @@ class AddRaptorXProperty():
     RaptorX job submissions.
 
     If you want to add another method that adds columns to the SAAV table, you
-    should add it here and it should start with "append_"
+    should add it here and it should start with "append_", then add the added column
+    names to the list returned by self.column_names()
     """
 
-    def __init__(self, table, args):
+    def __init__(self, table, args, ss3_confidence=0.5, ss8_confidence=0.5, solvent_acc_confidence=0.5):
 
         self.args = args
         A = lambda x: args[x] if x in args else None
 
     #   making input variables attributes
         self.input_dir = A("input-dir")
-        self.ss3_confidence = A("ss3-confidence")
-        self.ss8_confidence = A("ss8-confidence")
-        self.solvent_acc_confidence = A("solvent-acc-confidence")
+        self.ss3_confidence = ss3_confidence
+        self.ss8_confidence = ss8_confidence 
+        self.solvent_acc_confidence = solvent_acc_confidence 
 
     #   make sure table is VariantsTable object
         self.table = table
@@ -1059,6 +1083,29 @@ class AddRaptorXProperty():
 
     #   add all the columns associated with the append methods in method_list
         self.add_columns()
+
+    @staticmethod
+    def column_names():
+        return ["ss3",
+                "ss3_num_alpha_per_gene",
+                "ss3_num_beta_per_gene",
+                "ss3_num_loop_per_gene",
+                "ss3_num_unknown_per_gene",
+                "solvent_acc",
+                "solvent_acc_num_buried_per_gene",
+                "solvent_acc_num_intermediate_per_gene",
+                "solvent_acc_num_exposed_per_gene",
+                "solvent_acc_num_unknown_per_gene",
+                "ss8",
+                "ss8_num_L_per_gene"
+                "ss8_num_H_per_gene",
+                "ss8_num_G_per_gene",
+                "ss8_num_I_per_gene",
+                "ss8_num_E_per_gene",
+                "ss8_num_B_per_gene",
+                "ss8_num_T_per_gene",
+                "ss8_num_S_per_gene"]
+
 
     def add_columns(self):
         """
@@ -1123,15 +1170,15 @@ class AddRaptorXProperty():
             l = [col for col in ss8.columns if "prob_" in col]
             ss8["ss8"] = ss8.apply(lambda row: row["ss8"] if any(row[l] > self.ss8_confidence) else "U", axis = 1)
         #   ss8_genewide_X is the total number of AAs in the gene with secondary structure X
-            ss8["ss8_genewide_H"] = len(ss8[ss8["ss8"] == "H"])
-            ss8["ss8_genewide_G"] = len(ss8[ss8["ss8"] == "G"])
-            ss8["ss8_genewide_I"] = len(ss8[ss8["ss8"] == "I"])
-            ss8["ss8_genewide_E"] = len(ss8[ss8["ss8"] == "E"])
-            ss8["ss8_genewide_B"] = len(ss8[ss8["ss8"] == "B"])
-            ss8["ss8_genewide_T"] = len(ss8[ss8["ss8"] == "T"])
-            ss8["ss8_genewide_S"] = len(ss8[ss8["ss8"] == "S"])
-            ss8["ss8_genewide_L"] = len(ss8[ss8["ss8"] == "L"])
-            ss8["ss8_genewide_U"] = len(ss8[ss8["ss8"] == "U"])
+            ss8["ss8_num_H_per_gene"] = len(ss8[ss8["ss8"] == "H"])
+            ss8["ss8_num_G_per_gene"] = len(ss8[ss8["ss8"] == "G"])
+            ss8["ss8_num_I_per_gene"] = len(ss8[ss8["ss8"] == "I"])
+            ss8["ss8_num_E_per_gene"] = len(ss8[ss8["ss8"] == "E"])
+            ss8["ss8_num_B_per_gene"] = len(ss8[ss8["ss8"] == "B"])
+            ss8["ss8_num_T_per_gene"] = len(ss8[ss8["ss8"] == "T"])
+            ss8["ss8_num_S_per_gene"] = len(ss8[ss8["ss8"] == "S"])
+            ss8["ss8_num_L_per_gene"] = len(ss8[ss8["ss8"] == "L"])
+            ss8["ss8_num_U_per_gene"] = len(ss8[ss8["ss8"] == "U"])
         #   The `AA` column (1-letter AA code) is redundant, we already have `reference` (3-letter AA code)
         #   ss8_X are also dropped to cut down on saav_table_size, but code could be modified to retain them
             ss8 = ss8.drop(["AA"]+l, axis=1)
@@ -1230,10 +1277,10 @@ class AddRaptorXProperty():
             l = [col for col in acc.columns if "prob_" in col]
             acc["solvent_acc"] = acc.apply(lambda row: row["solvent_acc"] if any(row[l] > self.solvent_acc_confidence) else "U", axis = 1)
         #   prob_genewide_X is the total number of AAs in the gene with secondary structure X
-            acc["solvent_acc_genewide_B"] = len(acc[acc["solvent_acc"] == "B"])
-            acc["solvent_acc_genewide_M"] = len(acc[acc["solvent_acc"] == "M"])
-            acc["solvent_acc_genewide_E"] = len(acc[acc["solvent_acc"] == "E"])
-            acc["solvent_acc_genewide_U"] = len(acc[acc["solvent_acc"] == "U"])
+            acc["solvent_acc_num_buried_per_gene"] = len(acc[acc["solvent_acc"] == "B"])
+            acc["solvent_acc_num_intermediate_per_gene"] = len(acc[acc["solvent_acc"] == "M"])
+            acc["solvent_acc_num_exposed_per_gene"] = len(acc[acc["solvent_acc"] == "E"])
+            acc["solvent_acc_num_unknown_per_gene"] = len(acc[acc["solvent_acc"] == "U"])
         #   The `AA` column (1-letter AA code) is redundant, we already have `reference` (3-letter AA code)
         #   prob_X are also dropped to cut down on saav_table_size, but code could be modified to retain them
             acc = acc.drop(["AA"]+l, axis=1)
@@ -1251,16 +1298,17 @@ class VariantsTable():
     def __init__(self, args):
         
         self.args = args
-        A = lambda x: args[x] if x in args else None
 
+        #A = lambda x: args[x] if x in args else None
+        A = lambda x: args.__dict__[x] if x in args.__dict__ else None
     #   converting input to self variables
-        self.saav_table_fname = A("saav-table")
-        self.genes_list_fname = A("gene-list")
-        self.samples_list_fname = A("samples-list")
-        self.simplify_sample_id_method = A("simplify-sample-id-method")
-        self.output_dir = A("output-dir")
-        self.input_dir = A("raptor-repo")
-        self.save_file = A("save-file")
+        self.saav_table_fname = A("saav_table")
+        self.genes_list_fname = A("gene_list")
+        self.samples_list_fname = A("samples_list")
+        self.simplify_sample_id_method = A("simplify_sample_id_method")
+        self.output_dir = A("output_dir")
+        self.input_dir = A("raptor_repo")
+        self.save_file = A("save_file")
 
     #   load the saav table
         self.load()
@@ -1340,23 +1388,24 @@ class VariantsTable():
         """
         Gene file looks like
 
-        gene_id    pfam
-        1248       something
-        1344       something_else
-        ...        ...
-
-        If you only give a gene_id, an empty column is added
+        gene_id
+        1248
+        1344
+        ...
 
         """
     #   if there is no file name provided, return all genes in SAAV table
         if self.genes_list_fname is None:
+            print(("\nWARNING: You did not provide a list of genes. Including all genes "
+                   "present in SAAV table."))
             return list(self.saav_table["corresponding_gene_call"].unique())
 
     #   otherwise return genes_list
         else:
             if not os.path.isfile(self.genes_list_fname):
-                raise ValueError("Your genes-list path sucks")
-            return [int(x.strip()) for x in open(self.genes_list_fname).readlines()]
+                raise ValueError("Your genes-list path sucks, sorry, not sorry.")
+            genes = [x.strip() for x in open(self.genes_list_fname).readlines()][1:]
+            return [int(x) for x in genes]
 
 
     def load_samples_file_as_list(self):
@@ -1370,7 +1419,9 @@ class VariantsTable():
         else:
             if not os.path.isfile(self.samples_list_fname):
                 raise ValueError("Your samples-list path sucks")
-            return [int(x.strip()) for x in open(self.samples_list_fname).readlines()]
+        #   assumes a header
+            genes = [x.strip() for x in open(self.samples_list_fname).readlines()][1:]
+            return [int(x) for x in genes]
 
 
     def filter_table(self, column, elements):
@@ -1424,41 +1475,18 @@ class VariantsTable():
 
 class Config:
     """
-    The format of this file should be standard INI format. an example would be
-
-        [<perspective1>]
-        # <perspective1> should be a name that describes or summarizes the below parameters
-        color_var     = <a column name from SAAV table>
-        sphere_size_var     = <a column name from SAAV table>
-        alpha_var     = <a column name from SAAV table>
-        color_scheme  = <a recognized keyword for color mappings, a default exists for each accepted color_var variable>
-        sphere_size_range   = <"x, y", where x is the the lower radius value and y is the upper, default = 0.65, 2.6
-        alpha_range   = <"x, y", where x is the the lower radius value and y is the upper, default = 0.00, 0.85
-        sidechain     = <whether or not sidechains of the variants are visible>
-
-        merged_sphere_size_var     = <a column name from SAAV table>
-        merged_alpha_var     = <a column name from SAAV table>
-        merged_sphere_size_range   = <"x, y", where x is the the lower radius value and y is the upper, default = 0.65, 2.6
-        merged_alpha_range   = <"x, y", where x is the the lower radius value and y is the upper, default = 0.00, 0.85
-
-        [<perspective2>]
-        ...
-
-    What's probably confusing and what's probably even more annoying to explain
-    is the merged variables.  All of the non-merged variables define the images
+    See help for a description of how the pymol-config file should look.  What
+    might be confusing and what's probably even more annoying to explain is the
+    merged variables.  All of the non-merged variables define the images
     produced for each sample. But the samples can be grouped according to the
     sample_groups.txt file, and a composite/merged image of each of these
     groupings is also made.  Since many of the SAAVs in the merged image will
     overlap, it's convenient to visualize the degree of overlap with either the
-    sphere_size, alpha, or I guess color of the spheres. For this reason, you can
-    also define all of the parameters for the merged image. If they are not
+    sphere_size, alpha, or I guess color of the spheres. For this reason, you
+    can also define all of the parameters for the merged image. If they are not
     specified, all of the non-merged settings will be copied to the merged
     settings. Okay, that wasn't so bad.
     """
-    
-    """ IMPORTANT: The indexing syntax for configparser is fundamentally
-    different between python2 and python3. Once we start running pymol
-    through python 3, this syntax will have to be imported over. """
     
     def __init__(self, config_fname):
 
@@ -1584,7 +1612,6 @@ class Config:
                     self.config.set(perspective, option, self.defaults[option])
 
 
-
             """All defaults have been added. Now going through the value for each option to make sure its valid"""
 
 
@@ -1593,6 +1620,8 @@ class Config:
             #   raise hell if user provided options outside of self.options
                 if option not in self.options_list:
                     raise ValueError("{} in {} isn't a valid option.".format(option, perspective))
+
+                print(option, value)
 
             ############## INCOMPLETE. FOR NOW WE TRUST THE USERS OPTION VALUES ARE VALID ##############
 
