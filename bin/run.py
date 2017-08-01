@@ -100,17 +100,18 @@ user doesn't like the default sphere_size, they can give their own via
 In `myperspective2`, we see new options prepended with `merged_`. Just how
 non-merged options define the images produced for each sample, merged options
 define the merged images produced for each group (see --sample-groups for a
-definition of groups and merged images). With this in mind, `merged_alpha_var =
-departure_from_reference` indicates SAAV transparency is proportional to
-`departure_from_reference` for all merged images (since `alpha_var` was not
-provided, all non-merged images are given a default static alpha value).
-`merged_sphere_size_var = prevalence` is an exceptional case because
-`prevalence` is not a column in the SAAV table--but instead of raising an
-error, `prevalence` is used as a keyword. So what's prevalence?  It's defined
-as the number of samples in a group that have a SAAV at a given codon position
-divided by the number of samples in the group.  For example, consider an AA
-sequence for 3 samples residing in a group, where "=" means no SAAV and "o"
-means SAAV.
+definition of groups and merged images). NOTE: Currently only alpha- and
+radii-associated options have merged counterparts. With this in mind,
+`merged_alpha_var = departure_from_reference` indicates SAAV transparency is
+proportional to `departure_from_reference` for all merged images (since
+`alpha_var` was not provided, all non-merged images are given a default static
+alpha value).  `merged_sphere_size_var = prevalence` is an exceptional case
+because `prevalence` is not a column in the SAAV table--but instead of raising
+an error, `prevalence` is used as a keyword. So what's prevalence?  It's
+defined as the number of samples in a group that have a SAAV at a given codon
+position divided by the number of samples in the group.  For example, consider
+an AA sequence for 3 samples residing in a group, where "=" means no SAAV and
+"o" means SAAV.
 
     sample1 =o======o=
     sample2 =o======o=

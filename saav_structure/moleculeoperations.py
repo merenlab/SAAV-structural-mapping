@@ -60,12 +60,13 @@ class MoleculeOperations():
         self.no_images = A("no_images")
         self.ray = A("ray")
         self.res = A("res")
+        self.allow_quince = A("allow_quince")
 
     #   get dictionary of all columns appended by external classes (for now its just RaptorX)
         self.AddClasses = self.get_dict_of_additional_column_names()
 
     #   initialize a VariantsTable object
-        self.table = VariantsTable(args)
+        self.table = VariantsTable(args, rid_quince=True)
 
     #   make sure the input_dir is in good shape
         self.validate_input_dir(self.input_dir, self.table)
@@ -1290,7 +1291,7 @@ class AddRaptorXProperty():
 
 class VariantsTable():
     
-    def __init__(self, args):
+    def __init__(self, args, rid_quince=False):
         
         self.args = args
 
@@ -1308,6 +1309,16 @@ class VariantsTable():
     #   load the saav table
         self.load()
 
+    #   is it quince mode?
+        self.quince = True if (self.saav_table["departure_from_consensus"]==0).any() else False
+        if self.quince and rid_quince:
+            print(("\nWARNING: Your table has `departure_from_consensus` values equal to 0, which probably is the result "
+                   "of using the --quince-mode flag during your `anvi-gen-variability-profile` call. This means you were "
+                   "about to visualize amino acid positions that are not SAAVs! I am going to save you from this peril "
+                   "by removing these entries in your SAAV table."))
+            self.saav_table = self.saav_table[self.saav_table["departure_from_consensus"] != 0] 
+
+
     #   simplify sample id 
         if self.simplify_sample_id_method:
             self.simplify_sample_ids()
@@ -1322,6 +1333,7 @@ class VariantsTable():
 
     #   get array of columns that exist in this table
         self.columns = self.get_columns()
+
 
     def merge_sample_groups_to_table(self, merger, prevalence):
         """
