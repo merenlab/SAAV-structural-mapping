@@ -171,6 +171,7 @@ class MoleculeOperations():
                 self.perspective_dir_images = os.path.join(self.perspective_dir, "Images")
                 self.mkdirp(self.perspective_dir_images)
 
+        #   get copy of SAAV table for what's to follow
         #   This is where the "color_hierarchy" attribute comes in.
         #   colorObject, which determines how the SAAVs are colored, is
         #   reinstantiated based on the color_hierarchy attribute. If
@@ -182,12 +183,16 @@ class MoleculeOperations():
         #   you're coloring by competing_aas and there are more than, say, 40
         #   AASTs per gene. To avoid colorObject being reinstantiated
         #   inappropriately, self.get_colormap is always called conditioned by
-        #   color_hierarchy being either global, gene, or group. 
+        #   color_hierarchy being either global, gene, or group. I've also added
+        #   some sphere_size and alpha hierarchies that follow the same concept
+        #   for sphere_size and--you guessed it--alpha!
             self.color_hierarchy = self.config.config_dict[self.perspective]["color_hierarchy"]
+            self.sphere_size_hierarchy = self.config.config_dict[self.perspective]["sphere_size_hierarchy"]
+            self.alpha_hierarchy = self.config.config_dict[self.perspective]["alpha_hierarchy"]
+
             if self.color_hierarchy == "global":
-                saav_table_subset = self.get_relevant_saav_table()
-                self.colorObject = Color(saav_table_subset, self.config.config_dict, self.perspective)
-                self.colorObject.export_legend(os.path.join(self.perspective_dir_legends, "color"), saav_table_subset, "{}_global_color_legend.txt".format(self.perspective))
+                self.colorObject = Color(self.table.saav_table, self.config.config_dict, self.perspective)
+                self.colorObject.export_legend(os.path.join(self.perspective_dir_legends, "color"), self.table.saav_table, "{}_global_color_legend.txt".format(self.perspective))
 
         #   loop through each gene
             self.loop_through_genes()
@@ -223,16 +228,17 @@ class MoleculeOperations():
             self.do_all_protein_pse_things()
 
         #   create a gene color legend (and reinstantiate colorObject if self.colorhierarchy = gene)
-            saav_table_subset = self.get_relevant_saav_table(gene=self.gene)
+            saav_table_subset_gene = self.get_relevant_saav_table(gene=self.gene)
+
             if self.color_hierarchy == "gene":
-                self.colorObject = Color(saav_table_subset, self.config.config_dict, self.perspective)
-            self.colorObject.export_legend(os.path.join(self.perspective_dir_legends, "color"), saav_table_subset, "{}_{}_color_legend.txt".format(self.perspective, self.gene))
+                self.colorObject = Color(saav_table_subset_gene, self.config.config_dict, self.perspective)
+            self.colorObject.export_legend(os.path.join(self.perspective_dir_legends, "color"), saav_table_subset_gene, "{}_{}_color_legend.txt".format(self.perspective, self.gene))
 
         #   loop through each grouping
-            self.loop_through_groupings()
+            self.loop_through_groupings(saav_table_subset_gene)
 
 
-    def loop_through_groupings(self):
+    def loop_through_groupings(self, saav_table_subset_gene):
         """
         Some definitions are needed here for readability.
 
@@ -259,13 +265,17 @@ class MoleculeOperations():
                 self.member = member
 
             #   subset the saav_table to include only group and gene
-                saav_table_subset = self.get_relevant_saav_table(gene=self.gene, member=self.member)
+                saav_table_subset_member = self.get_relevant_saav_table(gene=self.gene, member=self.member)
 
             #   redefine alpha and sphere_size max/min (in case alpha_var or sphere_size_var are member-specific (like for prevalence))
-                self.sphere_size_and_alpha_min_and_max = self.get_min_and_max_for_alpha_and_sphere_size(saav_table_subset)
+                d = {"global" : self.table.saav_table,
+                     "gene"   : saav_table_subset_gene,
+                     "member" : saav_table_subset_member}
+                self.sphere_size_min_and_max = self.get_min_and_max_for_sphere_size(d[self.sphere_size_hierarchy])
+                self.alpha_min_and_max = self.get_min_and_max_for_alpha(d[self.alpha_hierarchy])
 
             #   make the saav .pse
-                self.do_all_saav_pse_things(saav_table_subset)
+                self.do_all_saav_pse_things(saav_table_subset_member)
 
             #   make an image for the group
                 self.do_all_image_things()
@@ -274,12 +284,9 @@ class MoleculeOperations():
                 cmd.delete(self.member)
 
 
-    def get_min_and_max_for_alpha_and_sphere_size(self, saav_table_subset):
-        """
-        right now--unlike color--alpha and sphere_size don't get their own class
-        or hierarchy parameter so they're defined here. It's cool though.
-        """
-        sphere_size_and_alpha_min_and_max = {}
+    def get_min_and_max_for_alpha(self, saav_table_subset):
+
+        alpha_min_and_max = {}
 
         group_specific = ["prevalence"]
 
@@ -287,32 +294,43 @@ class MoleculeOperations():
 
             if "merged_alpha_var" in self.config.config_dict[self.perspective].keys():
                 if self.config.config_dict[self.perspective]["merged_alpha_var"] in group_specific:
-                    sphere_size_and_alpha_min_and_max["merged_alpha_m"] = saav_table_subset[self.grouping+"_"+self.config.config_dict[self.perspective]["merged_alpha_var"]].min()
-                    sphere_size_and_alpha_min_and_max["merged_alpha_M"] = saav_table_subset[self.grouping+"_"+self.config.config_dict[self.perspective]["merged_alpha_var"]].max()
+                    alpha_min_and_max["merged_alpha_m"] = saav_table_subset[self.grouping+"_"+self.config.config_dict[self.perspective]["merged_alpha_var"]].min()
+                    alpha_min_and_max["merged_alpha_M"] = saav_table_subset[self.grouping+"_"+self.config.config_dict[self.perspective]["merged_alpha_var"]].max()
                 else:
-                    sphere_size_and_alpha_min_and_max["merged_alpha_m"] = self.table.saav_table[self.config.config_dict[self.perspective]["merged_alpha_var"]].min()
-                    sphere_size_and_alpha_min_and_max["merged_alpha_M"] = self.table.saav_table[self.config.config_dict[self.perspective]["merged_alpha_var"]].max()
+                    alpha_min_and_max["merged_alpha_m"] = self.table.saav_table[self.config.config_dict[self.perspective]["merged_alpha_var"]].min()
+                    alpha_min_and_max["merged_alpha_M"] = self.table.saav_table[self.config.config_dict[self.perspective]["merged_alpha_var"]].max()
+
+        else:
+
+            if "alpha_var" in self.config.config_dict[self.perspective].keys():
+                alpha_min_and_max["alpha_m"] = self.table.saav_table[self.config.config_dict[self.perspective]["alpha_var"]].min()
+                alpha_min_and_max["alpha_M"] = self.table.saav_table[self.config.config_dict[self.perspective]["alpha_var"]].max()
+        return alpha_min_and_max
+
+
+    def get_min_and_max_for_sphere_size(self, saav_table_subset):
+
+        sphere_size_min_and_max = {}
+
+        group_specific = ["prevalence"]
+
+        if not self.doing_samples:
 
             if "merged_sphere_size_var" in self.config.config_dict[self.perspective].keys():
                 if self.config.config_dict[self.perspective]["merged_sphere_size_var"] in group_specific:
-                    sphere_size_and_alpha_min_and_max["merged_sphere_size_m"] = saav_table_subset[self.grouping+"_"+self.config.config_dict[self.perspective]["merged_sphere_size_var"]].min()
-                    sphere_size_and_alpha_min_and_max["merged_sphere_size_M"] = saav_table_subset[self.grouping+"_"+self.config.config_dict[self.perspective]["merged_sphere_size_var"]].max()
+                    sphere_size_min_and_max["merged_sphere_size_m"] = saav_table_subset[self.grouping+"_"+self.config.config_dict[self.perspective]["merged_sphere_size_var"]].min()
+                    sphere_size_min_and_max["merged_sphere_size_M"] = saav_table_subset[self.grouping+"_"+self.config.config_dict[self.perspective]["merged_sphere_size_var"]].max()
                     
                 else:
-                    sphere_size_and_alpha_min_and_max["merged_sphere_size_m"] = self.table.saav_table[self.config.config_dict[self.perspective]["merged_sphere_size_var"]].min()
-                    sphere_size_and_alpha_min_and_max["merged_sphere_size_M"] = self.table.saav_table[self.config.config_dict[self.perspective]["merged_sphere_size_var"]].max()
+                    sphere_size_min_and_max["merged_sphere_size_m"] = self.table.saav_table[self.config.config_dict[self.perspective]["merged_sphere_size_var"]].min()
+                    sphere_size_min_and_max["merged_sphere_size_M"] = self.table.saav_table[self.config.config_dict[self.perspective]["merged_sphere_size_var"]].max()
 
         else:
 
             if "sphere_size_var" in self.config.config_dict[self.perspective].keys():
-                sphere_size_and_alpha_min_and_max["sphere_size_m"] = self.table.saav_table[self.config.config_dict[self.perspective]["sphere_size_var"]].min()
-                sphere_size_and_alpha_min_and_max["sphere_size_M"] = self.table.saav_table[self.config.config_dict[self.perspective]["sphere_size_var"]].max()
-
-            if "alpha_var" in self.config.config_dict[self.perspective].keys():
-                sphere_size_and_alpha_min_and_max["alpha_m"] = self.table.saav_table[self.config.config_dict[self.perspective]["alpha_var"]].min()
-                sphere_size_and_alpha_min_and_max["alpha_M"] = self.table.saav_table[self.config.config_dict[self.perspective]["alpha_var"]].max()
-
-        return sphere_size_and_alpha_min_and_max
+                sphere_size_min_and_max["sphere_size_m"] = self.table.saav_table[self.config.config_dict[self.perspective]["sphere_size_var"]].min()
+                sphere_size_min_and_max["sphere_size_M"] = self.table.saav_table[self.config.config_dict[self.perspective]["sphere_size_var"]].max()
+        return sphere_size_min_and_max
 
 
     def do_all_image_things(self):
@@ -322,7 +340,7 @@ class MoleculeOperations():
     #   collages, any view setting like orientation, etc. this really deserves
     #   its own class. Instead I'll just call this 1-liner that saves the image
         self.create_image_file() 
-        
+
 
     def create_image_file(self):
         """
@@ -340,7 +358,7 @@ class MoleculeOperations():
     def join_pses(self, pse_list):
         """
         Merges multiple pse sessions using the settings of the first file.
-    
+
         INPUT
         -----
         pse_list : list
@@ -456,8 +474,8 @@ class MoleculeOperations():
             #   parameters for normalization
                 alpha = self.config.config_dict[self.perspective][t("alpha_range")][0]
                 beta  = self.config.config_dict[self.perspective][t("alpha_range")][1]
-                m = self.sphere_size_and_alpha_min_and_max[t("alpha_m")]
-                M = self.sphere_size_and_alpha_min_and_max[t("alpha_M")]
+                m = self.alpha_min_and_max[t("alpha_m")]
+                M = self.alpha_min_and_max[t("alpha_M")]
             #   if the max is the min, we don't have a range to normalize over. the best
             #   we can do is return the average of alpha and beta
                 if m == M:
@@ -498,8 +516,8 @@ class MoleculeOperations():
             #   parameters for normalization
                 alpha = self.config.config_dict[self.perspective][t("sphere_size_range")][0]
                 beta  = self.config.config_dict[self.perspective][t("sphere_size_range")][1]
-                m = self.sphere_size_and_alpha_min_and_max[t("sphere_size_m")]
-                M = self.sphere_size_and_alpha_min_and_max[t("sphere_size_M")]
+                m = self.sphere_size_min_and_max[t("sphere_size_m")]
+                M = self.sphere_size_min_and_max[t("sphere_size_M")]
             #   if the max is the min, we don't have a range to normalize over. the best
             #   we can do is return the average of alpha and beta
                 if m == M:
@@ -1515,9 +1533,11 @@ class Config:
                                "sphere_size_var",
                                "sphere_size_range",
                                "sphere_size_static",
+                               "sphere_size_hierarchy",
                                "alpha_var",
                                "alpha_range",
                                "alpha_static",
+                               "alpha_hierarchy",
                                "merged_sphere_size_var",
                                "merged_sphere_size_range",
                                "merged_sphere_size_static",
@@ -1534,7 +1554,7 @@ class Config:
 
         self.convert_configparser_to_dictionary()
 
-        #self.print_config_dict()
+        self.print_config_dict()
 
 
     def save_pkl(self, directory):
@@ -1625,7 +1645,7 @@ class Config:
                         self.config.set(perspective, x[1], self.defaults[x[1]])
 
         #   Finally, we add defaults for variables that are independent of other variables (sidechain, protein color, yada, yada, yada) 
-            for option in ["sidechain", "color_hierarchy"]:
+            for option in ["sidechain", "color_hierarchy", "alpha_hierarchy", "sphere_size_hierarchy"]:
                 if option not in self.config.options(perspective):
                     self.config.set(perspective, option, self.defaults[option])
 
@@ -1693,13 +1713,15 @@ class Config:
 
         defaults = {"color_static"              : "#842f68",
                     "color_hierarchy"           : "global",
+                    "sphere_size_hierarchy"     : "global",
+                    "alpha_hierarchy"           : "global",
                     "sphere_size_static"        : "1.0",
                     "merged_sphere_size_static" : "1.0",
                     "alpha_static"              : "0.85",
                     "merged_alpha_static"       : "0.85",
                     "color_scheme"              : "darkred_to_darkblue",
                     "sphere_size_range"         : "0.25, 2.5",
-                    "merged_sphere_size_range"  : "0.25, 2.5",
+                    "merged_sphere_size_range"  : "0.15, 2.5",
                     "alpha_range"               : "0.10, 0.85",
                     "merged_alpha_range"        : "0.10, 0.85",
                     "sidechain"                 : "no"}
@@ -1743,6 +1765,7 @@ class Config:
                         "merged_color_static"       : str,
                         "color_scheme"              : str,
                         "sphere_size_var"           : str,
+                        "sphere_size_hierarchy"     : str,
                         "merged_sphere_size_var"    : str,
                         "sphere_size_static"        : float,
                         "merged_sphere_size_static" : float,
@@ -1751,6 +1774,7 @@ class Config:
                         "alpha_var"                 : str,
                         "merged_alpha_var"          : str,
                         "alpha_static"              : float,
+                        "alpha_hierarchy"           : str,
                         "merged_alpha_static"       : float,
                         "alpha_range"               : str_to_tuple,
                         "merged_alpha_range"        : str_to_tuple,
