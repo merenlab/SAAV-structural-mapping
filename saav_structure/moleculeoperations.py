@@ -648,7 +648,7 @@ class MoleculeOperations():
     #   if file was provided but doesn't exist, inform user
         try:
             if not os.path.isfile(self.sample_groups_fname):
-                raise ValueError("{} is not a file you moronic piece of scum.".format(self.sample_groups_fname))
+                raise ValueError("{} is not a file. Awkward.".format(self.sample_groups_fname))
         except:
             pass
 
@@ -693,7 +693,7 @@ class MoleculeOperations():
         protein_pdbs = glob.glob(os.path.join(self.input_dir, "{}.all_in_one".format(self.gene), "*.pdb"))
 
         if len(protein_pdbs) != 1:
-            raise ValueError("Expecting 1 pdb file but found {}".format(len(protein_pdbs)))
+            raise ValueError("Expecting 1 pdb file in {}.all_in_one but found {}".format(self.gene, len(protein_pdbs)))
         protein_pdb = protein_pdbs[0]
         return protein_pdb
 
@@ -731,12 +731,13 @@ class MoleculeOperations():
         """
     #   check that folder exists
         if not os.path.isdir(input_dir):
-            raise ValueError("you're so bad at this.")
+            raise ValueError("{} doesn't even exist.".format(input_dir))
  
     #   if there are zero folders matching the gene_id2.all_in_one format, raise hell
         subdir_list = glob.glob(os.path.join(input_dir, "*.all_in_one"))
         if len(subdir_list) == 0:
-            raise ValueError("what the fuck man")
+            raise ValueError("The input directory you provided doesn't have any subdirectories "
+                             "appended with '.all_in_one'. Seek help.")
  
     #   if genes in the table aren't found in the raptorx folder, no
         raptor_genes = [int(os.path.splitext(os.path.basename(x))[0]) for x in subdir_list]
@@ -848,6 +849,23 @@ class Color():
         gradient, and if the variable of string-like it directly returns the color
         mapping.
         """
+
+    #   if ; character is in color_scheme variable, it implies a user-defined color scheme
+        if ";" in self.config_dict[self.perspective]["color_scheme"]:
+
+        #   extract colors and values from user input
+            colors_string, values_string  = self.config_dict[self.perspective]["color_scheme"].split(";")
+            colors = [x.strip().replace(")","").replace("(","") for x in colors_string.split(",")]
+            values = np.asarray([float(x.strip().replace(")","").replace("(","")) for x in values_string.split(",")])
+
+        #   convert values into gradations
+            N = 256
+            value_range = np.max(values) - np.min(values)
+            value_diffs = np.diff(values)
+            gradations = list((value_diffs/value_range*N).astype(int))
+
+            return (colors, gradations)
+
 
         color_schemes_numeric = {
         "red_to_blue"                 : (["#a03129","#fcf5f4","#ffffff","#e8edf9", "#264799"],[50,25,25,50]),
@@ -1336,11 +1354,6 @@ class VariantsTable():
                    "by removing these entries in your SAAV table."))
             self.saav_table = self.saav_table[self.saav_table["departure_from_consensus"] != 0] 
 
-
-    #   simplify sample id 
-        if self.simplify_sample_id_method:
-            self.simplify_sample_ids()
-
     #   get genes and samples lists
         self.genes = self.load_genes_file_as_list()
         self.samples = self.load_samples_file_as_list()
@@ -1428,7 +1441,7 @@ class VariantsTable():
     #   otherwise return genes_list
         else:
             if not os.path.isfile(self.genes_list_fname):
-                raise ValueError("Your genes-list path sucks, sorry, not sorry.")
+                raise ValueError("Your genes-list path does not point to a file :S")
             genes = [x.strip() for x in open(self.genes_list_fname).readlines()][1:]
             return [int(x) for x in genes]
 
@@ -1443,7 +1456,7 @@ class VariantsTable():
     #   otherwise return samples_list
         else:
             if not os.path.isfile(self.samples_list_fname):
-                raise ValueError("Your samples-list path sucks")
+                raise ValueError("Your genes-list path does not point to a file :S")
         #   assumes a header
             genes = [x.strip() for x in open(self.samples_list_fname).readlines()][1:]
             return [int(x) for x in genes]
@@ -1458,28 +1471,13 @@ class VariantsTable():
         self.saav_table = self.saav_table[self.saav_table[column].isin(elements)]
 
 
-    def simplify_sample_ids(self):
-        """
-        If ad hoc sample_id modifications need to be made for whatever reason, you can define a method
-        here for such a purpose. For an example, see the case when simplify_sample_id_method == "SAR11",
-        for which this method was first defined.
-        """
-        if self.simplify_sample_id_method == "SAR11":
-            self.saav_table["sample_id"] = self.saav_table["sample_id"].str.replace("SAR11_","")
-            self.saav_table["sample_id"] = self.saav_table["sample_id"].str.replace("_BOWTIE2","")
-            self.saav_table["cohort"] = self.saav_table["sample_id"].str.split("_",expand=True)[0]
-        elif self.simplify_sample_id_method == "placeholder":
-            pass
-        else:
-            raise ValueError("fuck you, man")
-
-
     def load(self):
         """
         Load the SAAV table output from gen-variability-profile.
         """
         if not self.saav_table_fname:
-            raise ValueError("fuck you... you ass")
+            raise ValueError("You didn't provide a --saav-table argument.")
+
         self.saav_table = pd.read_csv(self.saav_table_fname, sep='\t', header=0, index_col=False)
 
 
@@ -1491,7 +1489,8 @@ class VariantsTable():
         if not self.save_file:
             raise ValueError("Surely you're joking, Mr. Feynman")
         if os.path.isfile(self.save_file):
-            raise ValueError("You can't just DO that...")
+            raise ValueError("The SAAV table you're trying to save already exists under that name. "
+                             "I won't let you overwrite an already existing file.")
     #   save the table in same format style as the output of gen-variability-profile
         self.saav_table.to_csv(self.save_file, sep='\t', index=False)
 
@@ -1638,7 +1637,7 @@ class Config:
                           ("merged_alpha_var","merged_alpha_static")]:
                     if (x[0] not in self.config.options(perspective) and x[1] not in self.config.options(perspective)):
                         self.config.set(perspective, x[1], self.defaults[x[1]])
-            #   if color_scheme, sphere_size_range, and alpha_range are not provided (but corresponding _vars are, defaults are set)
+            #   if color_scheme, sphere_size_range, and alpha_range are not provided (but corresponding _vars are), defaults are set
                 for x in [("merged_sphere_size_var","merged_sphere_size_range"),
                           ("merged_alpha_var","merged_alpha_range")]:
                     if (x[0] in self.config.options(perspective) and x[1] not in self.config.options(perspective)):

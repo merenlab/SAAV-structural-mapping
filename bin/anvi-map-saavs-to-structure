@@ -90,12 +90,19 @@ the color for each unique value of `competing_aas` is defined according to the
 colormap `competing_aas_cmap`, which has been specifically designed for
 `color_var = competing_aas` (e.g. AspGlu might map to red and IleVal might map
 to blue). For a list of all available color maps, raise an error by providing a
-color_scheme that definitely doesn't exist, like `thisshouldntexist`.
-`alpha_var = coverage` indicates SAAV tranparency is proportional to the
-`coverage` column of the SAAV table. Since the user does not specify a
-`sphere_size_var` option, a static sphere_size is chosen by default. If the
-user doesn't like the default sphere_size, they can give their own via
-`sphere_size_static = x`, where x=2.5, for example.
+color_scheme that definitely doesn't exist, like `thisshouldntexist`. If
+color_var was a continuous variable, like in `myperspective2`, you could choose
+a pre-existing color_scheme designed for continuous variables, such as
+`darkred_to_darkblue`, or, you could define your own color scheme with the
+following syntax: `color_scheme = (#ff0000,#0000ff);(-3,3)`.  This defines a
+color gradient from red (#ff0000) to blue (#0000ff). For example, in
+`myperspective2` a SAAV with a BLOSUM90_weighted of -3 would be red, +3 would
+be blue, and 0 would be a color inbetween. `alpha_var = coverage` indicates
+SAAV tranparency is proportional to the `coverage` column of the SAAV table.
+Since the user does not specify a `sphere_size_var` option, a static
+sphere_size is chosen by default. If the user doesn't like the default
+sphere_size, they can give their own via `sphere_size_static = x`, where x=2.5,
+for example.
 
 In `myperspective2`, we see new options prepended with `merged_`. Just how
 non-merged options define the images produced for each sample, merged options
