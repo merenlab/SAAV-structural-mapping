@@ -4,18 +4,22 @@ import sys
 import math
 import glob
 import time
-import pymol
 import shutil
 import random
 import inspect
 import functools
-import ConfigParser
 
 import numpy as np
 import pandas as pd
 import pickle as pkl
 
-from pymol import cmd
+try: 
+    import pymol
+    from pymol import cmd
+    import ConfigParser
+except:
+    pass
+
 from colour import Color as colour
 
 
