@@ -1,18 +1,3 @@
-"""
-TO DO:
-
-DONE 1. scale in proportion to volume, not radius
-DONE 2. order color_legend descending to ascending (or alphabetical order)
-DONE 3. change raptorXproperty names
-DONE 4. add RaptorXProperty variables if found in config but not saav_table
-5. config input validity
-6. active site analysis
-7. sidechain
-8. protein_color
-9. make color_scheme called `surprisinglythisexists`
-DONE 10. add argparse
-11. make anvi-append-external-columns-to-SAAV-table binary
-"""
 
 import os
 import sys
@@ -663,7 +648,7 @@ class MoleculeOperations():
         if set(in_both) != set(in_samples):
             raise ValueError("You have samples present in your sample-groups that are not "
                              "in your SAAV table. You can't just do that. The following are in "
-                             "sample-groups but not in saav_table".format\
+                             "sample-groups but not in saav_table: {}".format\
                              ([x for x in in_samples if x not in in_both]))
 
 
@@ -1553,7 +1538,7 @@ class Config:
 
         self.convert_configparser_to_dictionary()
 
-        self.print_config_dict()
+        #self.print_config_dict()
 
 
     def save_pkl(self, directory):
@@ -1731,7 +1716,7 @@ class Config:
 
     #   check that it exists
         if not os.path.isfile(self.config_fname):
-            raise("{} isn't even a file".format(self.config_name))
+            raise ValueError("{} isn't even a file".format(self.config_fname))
 
     #   load as ConfigParser object
         config = ConfigParser.ConfigParser()
