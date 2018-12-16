@@ -1125,6 +1125,7 @@ class AddRaptorXProperty():
             solvent_acc_path = glob.glob(os.path.join(self.input_dir,"{}.all_in_one".format(gene),"labeling","*.acc"))[0]
             acc = pd.read_csv(solvent_acc_path, skiprows=3, names=columns, delim_whitespace=True)
             acc['reference'] = acc['AA'].map({val:key for key, val in c.AA_to_single_letter_code.items()})
+            acc = acc[acc['reference'] != 'STP']
             l = [col for col in acc.columns if "prob_" in col]
             acc["solvent_acc"] = acc.apply(lambda row: row["solvent_acc"] if any(row[l] > self.solvent_acc_confidence) else "U", axis = 1)
             acc["solvent_acc"] = acc["solvent_acc"].replace(to_replace = solvent_acc_rename)
@@ -1139,7 +1140,7 @@ class AddRaptorXProperty():
         d['buried'] = d['buried'] / d['total']
         d['intermediate'] = d['intermediate'] / d['total']
         d['exposed'] = d['exposed'] / d['total']
-        d = d[['buried', 'intermediate', 'total']]
+        d = d[['buried', 'intermediate', 'exposed']]
         d.to_csv('solvent_accessibility_with_respect_to_amino_acid.txt', sep='\t', index=True)
 
     @staticmethod
