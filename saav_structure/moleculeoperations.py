@@ -1119,6 +1119,7 @@ class AddRaptorXProperty():
         columns = ("codon_order_in_gene","AA","solvent_acc","prob_B","prob_M","prob_E")
 
         import anvio.constants as c
+
         d = {aa:{'buried':0, 'intermediate':0, 'exposed':0} for aa in c.amino_acids}
         for gene in self.table.saav_table['corresponding_gene_call'].unique():
             solvent_acc_path = glob.glob(os.path.join(self.input_dir,"{}.all_in_one".format(gene),"labeling","*.acc"))[0]
@@ -1134,6 +1135,11 @@ class AddRaptorXProperty():
                 d[reference]['exposed'] += numbers.get('exposed', 0)
 
         d = pd.DataFrame(d).T
+        d['total'] = d['buried'] + d['intermediate'] + d['exposed']
+        d['buried'] = d['buried'] / d['total']
+        d['intermediate'] = d['intermediate'] / d['total']
+        d['exposed'] = d['exposed'] / d['total']
+        d = d[['buried', 'intermediate', 'total']]
         d.to_csv('solvent_accessibility_with_respect_to_amino_acid.txt', sep='\t', index=True)
 
     @staticmethod
