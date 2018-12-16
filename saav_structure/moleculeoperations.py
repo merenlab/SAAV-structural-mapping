@@ -1136,11 +1136,10 @@ class AddRaptorXProperty():
                 d[reference]['exposed'] += numbers.get('exposed', 0)
 
         d = pd.DataFrame(d).T
-        d['total'] = d['buried'] + d['intermediate'] + d['exposed']
+        d['total'] = d['buried'] + d['exposed']
         d['buried'] = d['buried'] / d['total']
-        d['intermediate'] = d['intermediate'] / d['total']
         d['exposed'] = d['exposed'] / d['total']
-        d = d[['buried', 'intermediate', 'exposed']]
+        d = d[['buried', 'exposed']]
         d.to_csv('solvent_accessibility_with_respect_to_amino_acid.txt', sep='\t', index=True)
 
     @staticmethod
