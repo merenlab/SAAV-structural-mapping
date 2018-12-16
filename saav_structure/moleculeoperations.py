@@ -731,6 +731,7 @@ class MoleculeOperations():
     #   if genes in the table aren't found in the raptorx folder, no
         raptor_genes = [int(os.path.splitext(os.path.basename(x))[0]) for x in subdir_list]
         in_both = [gene for gene in table.genes if gene in raptor_genes]
+        print(len(in_both))
         if not table.genes == in_both:
             missing_in_raptorx = [gene for gene in table.genes if gene not in in_both]
             raise ValueError("You have genes in your table that are missing in your "
@@ -1078,7 +1079,7 @@ class AddRaptorXProperty():
     names to the list returned by self.column_names()
     """
 
-    def __init__(self, table, args, ss3_confidence=0.5, ss8_confidence=0.5, solvent_acc_confidence=0.5):
+    def __init__(self, table, args, ss3_confidence=0.5, ss8_confidence=0.5, solvent_acc_confidence=0.5, report_residue_positions=False):
 
         self.args = args
         #A = lambda x: args[x] if x in args else None
@@ -1097,13 +1098,58 @@ class AddRaptorXProperty():
     #   make sure the input_dir is in good shape
         MoleculeOperations.validate_input_dir(self.input_dir, self.table)
 
+    #   also spit out a summary of number of buried exposed and intermediate for each amino acid
+        if report_residue_positions:
+            self.gen_report_residue_positions()
+
     #   define a list of all append methods in this class
         self.all_append_methods = self.get_append_methods()
-        
         self.methods_list = self.all_append_methods
 
     #   add all the columns associated with the append methods in method_list
         self.add_columns()
+
+
+    def gen_report_residue_positions(self):
+        solvent_acc_rename = {"B" : "buried",
+                              "M" : "intermediate",
+                              "E" : "exposed",
+                              "U" : "unknown"}
+
+        columns = ("codon_order_in_gene","AA","solvent_acc","prob_B","prob_M","prob_E")
+
+        for gene in self.table.saav_table['corresponding_gene_call'].unique():
+            solvent_acc_path = glob.glob(os.path.join(self.input_dir,"{}.all_in_one".format(gene),"labeling","*.acc"))[0]
+            acc = pd.read_csv(solvent_acc_path, skiprows=3, names=columns, delim_whitespace=True)
+            print(acc.head())
+
+        # def calc_solv_acc_in_1gene(x):
+        # #   get gene id of this groupby object, then find path of .ss3 file for that gene
+        #     gene = x["corresponding_gene_call"].values[0]
+        #     solvent_acc_path = glob.glob(os.path.join(self.input_dir,"{}.all_in_one".format(gene),"labeling","*.acc"))[0]
+        # #   load solvent_acc data for gene as pandas DataFrame
+        #     acc = pd.read_csv(solvent_acc_path, skiprows=3, names=columns, delim_whitespace=True)
+        # #   0 index the raptor results to conform to anvio convention :\
+        #     acc["codon_order_in_gene"] -= 1
+        # #   add gene column (used to uniquely map acc entries to saav entries)
+        #     acc["corresponding_gene_call"] = gene
+        # #   if the highest confidence for the 3 classes < self.solvent_acc_confidence, the SAAV is classified as "U" for unknown
+        #     l = [col for col in acc.columns if "prob_" in col]
+        #     acc["solvent_acc"] = acc.apply(lambda row: row["solvent_acc"] if any(row[l] > self.solvent_acc_confidence) else "U", axis = 1)
+        # #   prob_genewide_X is the total number of AAs in the gene with secondary structure X
+        #     acc["solvent_acc_num_buried_per_gene"] = len(acc[acc["solvent_acc"] == "B"])
+        #     acc["solvent_acc_num_intermediate_per_gene"] = len(acc[acc["solvent_acc"] == "M"])
+        #     acc["solvent_acc_num_exposed_per_gene"] = len(acc[acc["solvent_acc"] == "E"])
+        #     acc["solvent_acc_num_unknown_per_gene"] = len(acc[acc["solvent_acc"] == "U"])
+        # #   The `AA` column (1-letter AA code) is redundant, we already have `reference` (3-letter AA code)
+        # #   prob_X are also dropped to cut down on saav_table_size, but code could be modified to retain them
+        #     acc = acc.drop(["AA"]+l, axis=1)
+        #     acc["solvent_acc"] = acc["solvent_acc"].replace(to_replace = solvent_acc_rename)
+        # #   merge with original dataframe
+        #     return pd.merge(x,acc)
+
+        # saav_table_grouped = self.table.saav_table.groupby("corresponding_gene_call")
+        # self.table.saav_table = saav_table_grouped.apply(calc_solv_acc_in_1gene)
 
     @staticmethod
     def column_names():
