@@ -1118,38 +1118,23 @@ class AddRaptorXProperty():
 
         columns = ("codon_order_in_gene","AA","solvent_acc","prob_B","prob_M","prob_E")
 
+        import anvio.constants as c
+        d = {aa:{'buried':0, 'intermediate':0, 'exposed':0} for aa in c.amino_acids}
         for gene in self.table.saav_table['corresponding_gene_call'].unique():
             solvent_acc_path = glob.glob(os.path.join(self.input_dir,"{}.all_in_one".format(gene),"labeling","*.acc"))[0]
             acc = pd.read_csv(solvent_acc_path, skiprows=3, names=columns, delim_whitespace=True)
-            print(acc.head())
+            acc['reference'] = acc['AA'].map({val:key for key, val in c.AA_to_single_letter_code.items()})
+            l = [col for col in acc.columns if "prob_" in col]
+            acc["solvent_acc"] = acc.apply(lambda row: row["solvent_acc"] if any(row[l] > self.solvent_acc_confidence) else "U", axis = 1)
+            acc["solvent_acc"] = acc["solvent_acc"].replace(to_replace = solvent_acc_rename)
+            for reference, subset in acc.groupby('reference'):
+                numbers = subset['solvent_acc'].value_counts()
+                d[reference]['buried'] += numbers.get('buried', 0)
+                d[reference]['intermediate'] += numbers.get('intermediate', 0)
+                d[reference]['exposed'] += numbers.get('exposed', 0)
 
-        # def calc_solv_acc_in_1gene(x):
-        # #   get gene id of this groupby object, then find path of .ss3 file for that gene
-        #     gene = x["corresponding_gene_call"].values[0]
-        #     solvent_acc_path = glob.glob(os.path.join(self.input_dir,"{}.all_in_one".format(gene),"labeling","*.acc"))[0]
-        # #   load solvent_acc data for gene as pandas DataFrame
-        #     acc = pd.read_csv(solvent_acc_path, skiprows=3, names=columns, delim_whitespace=True)
-        # #   0 index the raptor results to conform to anvio convention :\
-        #     acc["codon_order_in_gene"] -= 1
-        # #   add gene column (used to uniquely map acc entries to saav entries)
-        #     acc["corresponding_gene_call"] = gene
-        # #   if the highest confidence for the 3 classes < self.solvent_acc_confidence, the SAAV is classified as "U" for unknown
-        #     l = [col for col in acc.columns if "prob_" in col]
-        #     acc["solvent_acc"] = acc.apply(lambda row: row["solvent_acc"] if any(row[l] > self.solvent_acc_confidence) else "U", axis = 1)
-        # #   prob_genewide_X is the total number of AAs in the gene with secondary structure X
-        #     acc["solvent_acc_num_buried_per_gene"] = len(acc[acc["solvent_acc"] == "B"])
-        #     acc["solvent_acc_num_intermediate_per_gene"] = len(acc[acc["solvent_acc"] == "M"])
-        #     acc["solvent_acc_num_exposed_per_gene"] = len(acc[acc["solvent_acc"] == "E"])
-        #     acc["solvent_acc_num_unknown_per_gene"] = len(acc[acc["solvent_acc"] == "U"])
-        # #   The `AA` column (1-letter AA code) is redundant, we already have `reference` (3-letter AA code)
-        # #   prob_X are also dropped to cut down on saav_table_size, but code could be modified to retain them
-        #     acc = acc.drop(["AA"]+l, axis=1)
-        #     acc["solvent_acc"] = acc["solvent_acc"].replace(to_replace = solvent_acc_rename)
-        # #   merge with original dataframe
-        #     return pd.merge(x,acc)
-
-        # saav_table_grouped = self.table.saav_table.groupby("corresponding_gene_call")
-        # self.table.saav_table = saav_table_grouped.apply(calc_solv_acc_in_1gene)
+        d = pd.DataFrame(d).T
+        d.to_csv('solvent_accessibility_with_respect_to_amino_acid.txt', sep='\t', index=True)
 
     @staticmethod
     def column_names():
