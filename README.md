@@ -1,6 +1,6 @@
 # Don't use this!
 
-The premise of this repositoriy has been superseded by an extension of anvi'o, and this repo still exists only for archival purposes / reproducibility. Please visit https://merenlab.org/software/anvio-structure/ if you want to map SAAVs onto structures
+The premise of this repositoriy has been superseded by an extension of anvi'o, and this repo still exists only for archival purposes / reproducibility. Please visit https://merenlab.org/software/anvio-structure/ if you want to map SAAVs onto structures, and do much more as well.
 
 ### Requirements
 
